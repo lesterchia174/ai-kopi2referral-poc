@@ -22,9 +22,12 @@ st.caption(
 # ─────────────────────────────────────────────────────────────
 def get_secret_or_input(secret_name: str, label: str) -> str:
     try:
-        return st.secrets[secret_name]
+        value = st.secrets[secret_name]
     except (KeyError, FileNotFoundError):
-        return st.text_input(label, type="password")
+        value = st.text_input(label, type="password")
+    
+    # .strip() removes accidental trailing spaces/newlines that cause 401 errors
+    return (value or "").strip()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -80,17 +83,27 @@ client = OpenAI(
 
 tavily = TavilyClient(api_key=tavily_key) if use_search else None
 
+# You are using gpt-oss-120b (Text-only model)
 MODEL = "openai/gpt-oss-120b"
 
+# ─────────────────────────────────────────────────────────────
+# SYSTEM PROMPT (Aligned to the Hiring Pyramid)
+# ─────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
     "You are 'Kopi2Referral', a warm, practical career-networking coach for "
-    "people looking for jobs in Singapore. You help the user build a realistic "
-    "networking route: who to meet, where to meet them (events, communities, "
-    "coffee chats), what to say, and how to follow up. Keep answers concise, "
-    "conversational and Singapore-specific (mention local communities, "
-    "co-working spaces, MRT-friendly venues where relevant). Use any supplied "
-    "web-search context to ground recommendations, and cite source URLs inline "
-    "when you use them."
+    "people looking for jobs in Singapore. "
+    "\n\n"
+    "IMPORTANT PHILOSOPHY (The Hiring Pyramid):\n"
+    "You must guide users AWAY from the top of the hiring pyramid (job boards, "
+    "agencies, applying online) and towards the bottom (networking, referrals, "
+    "coffee chats, and internal contacts), because that is how most people "
+    "actually get hired. Tell them to stop spamming resumes and start talking to people.\n\n"
+    "YOUR JOB:\n"
+    "Help the user build a realistic networking route: who to meet, where to meet "
+    "them (events, communities, MRT-friendly cafes for coffee chats), what to say, "
+    "and how to follow up. Keep answers concise, conversational and Singapore-specific. "
+    "Use any supplied web-search context to ground recommendations, and cite source "
+    "URLs inline when you use them."
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -132,7 +145,7 @@ def build_search_context(query: str) -> str:
     return "\n".join(lines)
 
 # ─────────────────────────────────────────────────────────────
-# CHAT INPUT
+# CHAT INPUT (The User Prompt)
 # ─────────────────────────────────────────────────────────────
 if prompt := st.chat_input("e.g. I'm a fresh grad targeting fintech product roles…"):
 
@@ -142,17 +155,19 @@ if prompt := st.chat_input("e.g. I'm a fresh grad targeting fintech product role
         st.markdown(prompt)
 
     # 2. Build the payload for the LLM
+    # The system prompt is injected at the very beginning of every request
     payload = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Only the LAST user turn needs fresh search context.
+    # Only the LAST user turn needs fresh search context to save API costs.
     if use_search:
-        with st.spinner("Searching the web…"):
+        with st.spinner("Searching the web for real people and events…"):
             context = build_search_context(prompt)
         if context:
             payload.append(
                 {"role": "system", "content": f"Useful live context:\n{context}"}
             )
 
+    # Add the conversation history
     payload.extend(st.session_state.messages)
 
     # 3. Stream the assistant reply
