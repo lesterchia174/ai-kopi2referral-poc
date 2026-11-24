@@ -80,7 +80,7 @@ client = OpenAI(
 
 tavily = TavilyClient(api_key=tavily_key) if use_search else None
 
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "openai/gpt-oss-120b"
 
 SYSTEM_PROMPT = (
     "You are 'Kopi2Referral', a warm, practical career-networking coach for "
